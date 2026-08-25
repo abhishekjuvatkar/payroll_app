@@ -18,6 +18,14 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    proxy: {
+      "/api": {
+        target: "https://payroll-app-msvr.onrender.com",
+        changeOrigin: true,
+      },
+    },
+  },
   build: {
     outDir: path.resolve(__dirname, "../backend/app/static"),
     emptyOutDir: true,
