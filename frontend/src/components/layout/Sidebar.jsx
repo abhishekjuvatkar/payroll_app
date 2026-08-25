@@ -18,9 +18,10 @@ import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { useLocation, useNavigate } from "react-router-dom";
 import PaidOutlinedIcon from "@mui/icons-material/PaidOutlined";
+import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 
 const navItems = [
-  //   { label: "Dashboard", icon: <DashboardIcon fontSize="small" />, path: "/" },
+  // { label: "Dashboard", icon: <DashboardIcon fontSize="small" />, path: "/" },
   {
     label: "Employees",
     icon: <PeopleIcon fontSize="small" />,
@@ -36,9 +37,17 @@ const navItems = [
     icon: <ReceiptLongIcon fontSize="small" />,
     path: "/payroll",
   },
-    { label: "Exports", icon: <DownloadIcon fontSize="small" />, path: "/exports" },
-    { label: "Basic Salary", icon: <DownloadIcon fontSize="small" />, path: "/update-basic" },
-    // { label: "Settings", icon: <SettingsIcon fontSize="small" />, path: "/settings" }
+  {
+    label: "Salary Update",
+    icon: <AccountBalanceWalletIcon fontSize="small" />,
+    path: "/salary-update",
+  },
+  {
+    label: "Exports",
+    icon: <DownloadIcon fontSize="small" />,
+    path: "/exports",
+  },
+  // { label: "Settings", icon: <SettingsIcon fontSize="small" />, path: "/settings" }
 ];
 
 export default function Sidebar() {

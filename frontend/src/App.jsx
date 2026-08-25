@@ -10,6 +10,7 @@ import PayrollEntryScreen from "./screens/PayrollEntryScreen";
 import ExportsScreen from "./screens/ExportsScreen";
 import SettingsScreen from "./screens/SettingsScreen";
 import SalaryHeadsScreen from "./screens/SalaryHeadsScreen";
+import Salary_Update from "./screens/Salary_Update";
 
 export default function App() {
   return (
@@ -23,6 +24,8 @@ export default function App() {
             <Route path="/exports" element={<ExportsScreen />} />
             <Route path="/settings" element={<SettingsScreen />} />
             <Route path="/salary-heads" element={<SalaryHeadsScreen />} />
+            <Route path="/salary-update" element={<Salary_Update />} />
+            <Route path="/update-basic" element={<Salary_Update />} />
           </Routes>
         </Container>
       </DashboardLayout>
