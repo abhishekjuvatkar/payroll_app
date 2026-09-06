@@ -19,6 +19,7 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { useLocation, useNavigate } from "react-router-dom";
 import PaidOutlinedIcon from "@mui/icons-material/PaidOutlined";
 import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
+import CompareArrowsIcon from "@mui/icons-material/CompareArrows";
 
 const navItems = [
   // { label: "Dashboard", icon: <DashboardIcon fontSize="small" />, path: "/" },
@@ -41,6 +42,11 @@ const navItems = [
     label: "Salary Update",
     icon: <AccountBalanceWalletIcon fontSize="small" />,
     path: "/salary-update",
+  },
+  {
+    label: "Salary Comparison",
+    icon: <CompareArrowsIcon fontSize="small" />,
+    path: "/salary-comparison",
   },
   {
     label: "Exports",
@@ -91,7 +97,7 @@ export default function Sidebar() {
           <AccountBalanceIcon />
         </Box>
         <Box>
-          <Typography variant="h6" fontWeight={800} lineHeight={1}>
+          <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1 }}>
             Payroll
           </Typography>
           <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.7)" }}>

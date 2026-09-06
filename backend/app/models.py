@@ -2,10 +2,12 @@ from sqlalchemy import (
     Column,
     Integer,
     String,
+    Text,
     Numeric,
     ForeignKey,
     UniqueConstraint,
     DateTime,
+    Boolean,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -17,8 +19,58 @@ class Employee(Base):
     __tablename__ = "employee_master"
 
     id = Column(Integer, primary_key=True, index=True)
-    employee_code = Column(String(30), unique=True, nullable=False)
-    employee_name = Column(String(200), nullable=False)
+    employee_code = Column(String(255), unique=True, nullable=False, index=True)
+    employee_name = Column(String(255), nullable=False, index=True)
+    
+    # Personal Details
+    title = Column(Text, nullable=True)
+    first_name = Column(Text, nullable=True)
+    middle_name = Column(Text, nullable=True)
+    last_name = Column(Text, nullable=True)
+    name_in_hindi = Column(Text, nullable=True)
+    gender = Column(Text, nullable=True)
+    date_of_birth = Column(Text, nullable=True)
+    guardian_name = Column(Text, nullable=True)
+    mother_name = Column(Text, nullable=True)
+    blood_group = Column(Text, nullable=True)
+    appointed_category = Column(Text, nullable=True)
+    social_category = Column(Text, nullable=True)
+    is_pwd = Column(Text, nullable=True)
+
+    # Employment & Designation
+    employee_type = Column(Text, nullable=True)
+    nature_of_employment = Column(Text, nullable=True)
+    organization_unit = Column(Text, nullable=True)
+    designation = Column(Text, nullable=True)
+    sanctioned_ou = Column(Text, nullable=True)
+    sanctioned_designation = Column(Text, nullable=True)
+    date_of_joining = Column(Text, nullable=True)
+    date_of_superannuation = Column(Text, nullable=True)
+    status = Column(Text, nullable=True, default="Active")
+
+    # Contact & Email
+    mobile_number = Column(Text, nullable=True)
+    office_phone_number = Column(Text, nullable=True)
+    alternate_mobile_no = Column(Text, nullable=True)
+    official_email = Column(Text, nullable=True)
+    personal_email = Column(Text, nullable=True)
+
+    # Addresses
+    residential_address = Column(Text, nullable=True)
+    residential_state = Column(Text, nullable=True)
+    residential_city = Column(Text, nullable=True)
+    residential_pincode = Column(Text, nullable=True)
+    residential_phone_number = Column(Text, nullable=True)
+
+    permanent_address = Column(Text, nullable=True)
+    permanent_state = Column(Text, nullable=True)
+    permanent_city = Column(Text, nullable=True)
+    permanent_pincode = Column(Text, nullable=True)
+
+    hometown = Column(Text, nullable=True)
+    hometown_state = Column(Text, nullable=True)
+    hometown_city = Column(Text, nullable=True)
+    hometown_pincode = Column(Text, nullable=True)
 
     payroll_entries = relationship(
         "PayrollEntry",

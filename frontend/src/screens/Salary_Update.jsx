@@ -46,6 +46,7 @@ import {
   fetchPayrollEntries,
   savePayrollEntries,
   exportPayrollExcel,
+  exportPayrollEntriesDirect,
 } from "../services/api";
 
 const now = new Date();
@@ -288,29 +289,45 @@ export default function SalaryUpdateScreen() {
     }
   };
 
-  // Export to Excel from backend API
+  // Export to Excel
   const handleExportExcel = async () => {
-    // If there are unsaved changes, save to backend first so Excel contains latest data
-    if (hasUnsavedChanges) {
-      setSaving(true);
-      const saved = await handleSaveAll(true);
-      if (!saved) {
-        return;
-      }
-    }
-
     setExporting(true);
     try {
-      await exportPayrollExcel(month, year);
-      setSnackbar({
-        open: true,
-        message: `Payroll export for ${month}/${year} generated from backend and downloaded.`,
-        severity: "success",
-      });
+      const validRows = (entries || []).filter(
+        (e) => (e.employee_name || e.employee_code || e.employee_id) && (e.actual_value !== "" && e.actual_value !== undefined)
+      );
+
+      if (validRows.length > 0) {
+        await exportPayrollEntriesDirect({
+          month,
+          year,
+          rows: validRows.map((r) => ({
+            employee_code: r.employee_code || "",
+            employee_name: r.employee_name || "",
+            salary_head: r.salary_head || "",
+            amount: r.actual_value || 0,
+            remarks: r.remarks || "",
+            month: month,
+            year: year
+          }))
+        });
+        setSnackbar({
+          open: true,
+          message: `Exported ${validRows.length} payroll entries to Excel successfully!`,
+          severity: "success",
+        });
+      } else {
+        await exportPayrollExcel(month, year);
+        setSnackbar({
+          open: true,
+          message: `Payroll export for ${month}/${year} generated and downloaded.`,
+          severity: "success",
+        });
+      }
     } catch (err) {
       setSnackbar({
         open: true,
-        message: "Failed to export Excel file. Please ensure entries are saved.",
+        message: "Failed to export Excel file.",
         severity: "error",
       });
     } finally {
@@ -440,7 +457,7 @@ export default function SalaryUpdateScreen() {
 
       {/* Quick Summary Cards */}
       <Grid container spacing={2.5} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={4}>
+        <Grid size={{ xs: 12, sm: 4 }}>
           <Card
             elevation={1}
             sx={{
@@ -476,7 +493,7 @@ export default function SalaryUpdateScreen() {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={4}>
+        <Grid size={{ xs: 12, sm: 4 }}>
           <Card
             elevation={1}
             sx={{
@@ -509,7 +526,7 @@ export default function SalaryUpdateScreen() {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={4}>
+        <Grid size={{ xs: 12, sm: 4 }}>
           <Card
             elevation={1}
             sx={{
