@@ -90,11 +90,37 @@ export default function PayrollTable({ month, year }) {
       );
       if (byName) return byName;
 
-      const norm = (s) => (s || "").replace(/^(dr\.|prof\.|mr\.|mrs\.|ms\.|shri|smt\.)\s+/i, "").replace(/[\s._-]+/g, " ").trim().toUpperCase();
+      const norm = (s) => (s || "").replace(/^(dr\.|prof\.|mr\.|mrs\.|ms\.|shri|smt\.)\s+/i, "").replace(/[^A-Za-z0-9\s]+/g, " ").replace(/\s+/g, " ").trim().toUpperCase();
       const targetNorm = norm(rawName);
       if (targetNorm) {
         const byNorm = masterList.find((e) => norm(e.employee_name) === targetNorm);
         if (byNorm) return byNorm;
+
+        const targetSorted = targetNorm.split(" ").sort().join(" ");
+        const bySorted = masterList.find((e) => norm(e.employee_name).split(" ").sort().join(" ") === targetSorted);
+        if (bySorted) return bySorted;
+
+        const targetTokens = targetNorm.split(" ");
+        const byTokens = masterList.find((e) => {
+          const eTokens = norm(e.employee_name).split(" ");
+          if (targetTokens.length === eTokens.length) {
+            const matchInitials = targetTokens.every((tt, idx) => {
+              const et = eTokens[idx];
+              return tt === et || tt === et[0] || et === tt[0];
+            });
+            if (matchInitials) return true;
+          }
+          if (targetTokens.length === 2 && eTokens.length === 2) {
+            if ((targetTokens[0].length === 1 && targetTokens[1] === eTokens[0] && targetTokens[0] === eTokens[1][0]) ||
+                (targetTokens[1].length === 1 && targetTokens[0] === eTokens[0] && targetTokens[1] === eTokens[1][0]) ||
+                (targetTokens[0].length === 1 && targetTokens[1] === eTokens[1] && targetTokens[0] === eTokens[0][0]) ||
+                (targetTokens[1].length === 1 && targetTokens[0] === eTokens[1] && targetTokens[1] === eTokens[0][0])) {
+              return true;
+            }
+          }
+          return false;
+        });
+        if (byTokens) return byTokens;
       }
     }
 
@@ -107,11 +133,18 @@ export default function PayrollTable({ month, year }) {
 
   const matchSalaryHeadWithMaster = (rawItem, headList = allSalaryHeads) => {
     const rawHead = (rawItem.salary_head || "").trim();
-    if (headList && headList.length) {
+    if (headList && headList.length && rawHead) {
       const byHead = headList.find(
-        (h) => h.salary_head && rawHead && h.salary_head.trim().toUpperCase() === rawHead.toUpperCase()
+        (h) => h.salary_head && h.salary_head.trim().toUpperCase() === rawHead.toUpperCase()
       );
       if (byHead) return byHead;
+
+      const norm = (s) => (s || "").replace(/\s*\([^)]*\)/g, "").replace(/[\s._-]+/g, " ").trim().toUpperCase();
+      const targetNorm = norm(rawHead);
+      if (targetNorm) {
+        const byNorm = headList.find((h) => norm(h.salary_head) === targetNorm);
+        if (byNorm) return byNorm;
+      }
     }
     return {
       id: rawItem.salary_head_db_id || null,
@@ -142,34 +175,46 @@ export default function PayrollTable({ month, year }) {
           try {
             const parsed = JSON.parse(prefilled);
             if (parsed?.length) {
-              const mappedRows = parsed.map((item) => {
-                const currentSheetAmount = item.current_value !== undefined && item.current_value !== null
-                  ? item.current_value
-                  : (item.actual_value !== undefined && item.actual_value !== null
-                    ? item.actual_value
-                    : (item.adjustment_amount !== undefined ? item.adjustment_amount : Math.abs(item.difference || 0)));
+              const mappedRows = parsed
+                .map((item) => {
+                  const rawAmount =
+                    item.current_value !== undefined && item.current_value !== null && Number(item.current_value) !== 0
+                      ? item.current_value
+                      : (item.actual_value !== undefined && item.actual_value !== null && Number(item.actual_value) !== 0
+                        ? item.actual_value
+                        : (item.adjustment_amount !== undefined && Number(item.adjustment_amount) !== 0
+                          ? item.adjustment_amount
+                          : Math.abs(item.difference || 0)));
 
-                const matchedEmp = matchEmployeeWithMaster(item, empList);
-                const matchedHead = matchSalaryHeadWithMaster(item, headList);
+                  const numAmount = Number(rawAmount);
+                  if (isNaN(numAmount) || numAmount <= 0) {
+                    return null; // Ignore 0 amount
+                  }
 
-                return {
-                  id: crypto.randomUUID(),
-                  employee: matchedEmp,
-                  salaryHead: matchedHead,
-                  amount: currentSheetAmount,
-                  remarks: item.remarks || `Current sheet value for ${item.salary_head}`
-                };
-              });
+                  const matchedEmp = matchEmployeeWithMaster(item, empList);
+                  const matchedHead = matchSalaryHeadWithMaster(item, headList);
 
-              setRows(mappedRows);
-              setPage(0);
-              setSnackbar({
-                open: true,
-                message: `⚡ 1-Click Automated! Loaded ${mappedRows.length} one-time adjustment entries from Salary Comparison.`,
-                severity: "success"
-              });
-              setLoading(false);
-              return;
+                  return {
+                    id: crypto.randomUUID(),
+                    employee: matchedEmp,
+                    salaryHead: matchedHead,
+                    amount: numAmount,
+                    remarks: item.remarks || `Current sheet value for ${item.salary_head}`
+                  };
+                })
+                .filter((r) => r !== null && Number(r.amount) > 0);
+
+              if (mappedRows.length > 0) {
+                setRows(mappedRows);
+                setPage(0);
+                setSnackbar({
+                  open: true,
+                  message: `⚡ 1-Click Automated! Loaded ${mappedRows.length} non-zero one-time adjustment entries from Salary Comparison.`,
+                  severity: "success"
+                });
+                setLoading(false);
+                return;
+              }
             }
           } catch (e) {
             console.error("Error parsing prefilled payroll entries", e);
@@ -178,8 +223,9 @@ export default function PayrollTable({ month, year }) {
 
         // Database entries
         if (entries?.length) {
-          setRows(
-            entries.map((entry) => ({
+          const nonZeroDbRows = entries
+            .filter((entry) => Number(entry.actual_value) > 0)
+            .map((entry) => ({
               id: crypto.randomUUID(),
               employee: {
                 id: entry.employee_id,
@@ -192,8 +238,9 @@ export default function PayrollTable({ month, year }) {
               },
               amount: entry.actual_value,
               remarks: entry.remarks || ""
-            }))
-          );
+            }));
+
+          setRows(nonZeroDbRows.length ? nonZeroDbRows : [emptyRow()]);
         } else {
           setRows([emptyRow()]);
         }
@@ -284,32 +331,53 @@ export default function PayrollTable({ month, year }) {
         return;
       }
 
-      const newRows = entries.map((item) => {
-        const currentSheetAmount = item.current_value !== undefined && item.current_value !== null
-          ? item.current_value
-          : (item.actual_value !== undefined && item.actual_value !== null
-            ? item.actual_value
-            : (item.adjustment_amount !== undefined ? item.adjustment_amount : Math.abs(item.difference || 0)));
+      const newRows = entries
+        .map((item) => {
+          const rawAmount =
+            item.current_value !== undefined && item.current_value !== null && Number(item.current_value) !== 0
+              ? item.current_value
+              : (item.actual_value !== undefined && item.actual_value !== null && Number(item.actual_value) !== 0
+                ? item.actual_value
+                : (item.adjustment_amount !== undefined && Number(item.adjustment_amount) !== 0
+                  ? item.adjustment_amount
+                  : Math.abs(item.difference || 0)));
 
-        const matchedEmp = matchEmployeeWithMaster(item);
-        const matchedHead = matchSalaryHeadWithMaster(item);
+          const numAmount = Number(rawAmount);
+          if (isNaN(numAmount) || numAmount <= 0) {
+            return null; // Ignore 0 amount
+          }
 
-        return {
-          id: crypto.randomUUID(),
-          employee: matchedEmp,
-          salaryHead: matchedHead,
-          amount: currentSheetAmount,
-          remarks: item.remarks || `Current sheet value for ${item.salary_head}`
-        };
-      });
+          const matchedEmp = matchEmployeeWithMaster(item);
+          const matchedHead = matchSalaryHeadWithMaster(item);
+
+          const cleanAmount = (numAmount % 1 === 0) ? Math.round(numAmount) : (Math.round(numAmount * 100) / 100);
+
+          return {
+            id: crypto.randomUUID(),
+            employee: matchedEmp,
+            salaryHead: matchedHead,
+            amount: cleanAmount,
+            remarks: item.remarks || `Current sheet value for ${item.salary_head}`
+          };
+        })
+        .filter((r) => r !== null && Number(r.amount) > 0);
+
+      if (!newRows.length) {
+        setSnackbar({
+          open: true,
+          message: "No non-zero adjustment entries available to import.",
+          severity: "warning"
+        });
+        return;
+      }
 
       setRows(newRows);
       setPage(0);
-      sessionStorage.setItem("PREFILLED_PAYROLL_ENTRIES", JSON.stringify(entries));
-      localStorage.setItem("LATEST_ONE_TIME_PAYROLL_ENTRIES", JSON.stringify(entries));
+      sessionStorage.setItem("PREFILLED_PAYROLL_ENTRIES", JSON.stringify(newRows));
+      localStorage.setItem("LATEST_ONE_TIME_PAYROLL_ENTRIES", JSON.stringify(newRows));
       setSnackbar({
         open: true,
-        message: `⚡ 1-Click Automated! Imported ${newRows.length} one-time adjustment records with current sheet amounts. Click 'Save' to commit to database.`,
+        message: `⚡ 1-Click Automated! Imported ${newRows.length} one-time adjustment records with non-zero amounts. Click 'Save' to commit to database.`,
         severity: "success"
       });
     } catch (err) {
@@ -326,36 +394,41 @@ export default function PayrollTable({ month, year }) {
   const reloadRows = async () => {
     const data = await fetchPayrollEntries(month, year);
     if (data?.length) {
-      setRows(
-        data.map((entry) => ({
-          id: crypto.randomUUID(),
-          employee: {
-            id: entry.employee_id,
-            employee_code: entry.employee_code,
-            employee_name: entry.employee_name
-          },
-          salaryHead: {
-            id: entry.salary_head_id,
-            salary_head: entry.salary_head
-          },
-          amount: entry.actual_value,
-          remarks: entry.remarks || ""
-        }))
-      );
+      const nonZeroRows = data
+        .filter((entry) => Number(entry.actual_value) > 0)
+        .map((entry) => {
+          const val = Number(entry.actual_value);
+          return {
+            id: crypto.randomUUID(),
+            employee: {
+              id: entry.employee_id,
+              employee_code: entry.employee_code,
+              employee_name: entry.employee_name
+            },
+            salaryHead: {
+              id: entry.salary_head_id,
+              salary_head: entry.salary_head
+            },
+            amount: (val % 1 === 0) ? Math.round(val) : val,
+            remarks: entry.remarks || ""
+          };
+        });
+      setRows(nonZeroRows.length ? nonZeroRows : [emptyRow()]);
     }
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      const validRows = rows.filter((r) => Number(r.amount) > 0);
       const syncPayload = {
         month: Number(month),
         year: Number(year),
-        entries: rows.map((r) => ({
+        entries: validRows.map((r) => ({
           employee_code: r.employee?.employee_code || r.employee?.employee_name || "",
           employee_name: r.employee?.employee_name || r.employee?.employee_code || "",
           salary_head: r.salaryHead?.salary_head || "",
-          current_value: r.amount !== "" && r.amount !== null ? Number(r.amount) : 0,
+          current_value: Number(r.amount) || 0,
           remarks: r.remarks || ""
         }))
       };
@@ -364,7 +437,7 @@ export default function PayrollTable({ month, year }) {
       await reloadRows();
       setSnackbar({
         open: true,
-        message: `${rows.length} entries saved successfully to database.`,
+        message: `${validRows.length} non-zero entries saved successfully to database.`,
         severity: "success"
       });
     } catch (err) {
@@ -419,9 +492,11 @@ export default function PayrollTable({ month, year }) {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const validRows = (rows || []).filter(
-        (r) => (r.employee && (r.employee.employee_name || r.employee.employee_code)) || (r.amount && String(r.amount).trim() !== "")
-      );
+      const validRows = (rows || []).filter((r) => {
+        const hasEmp = r.employee && (r.employee.employee_name || r.employee.employee_code);
+        const amt = parseFloat(r.amount);
+        return hasEmp && !isNaN(amt) && amt > 0;
+      });
 
       if (validRows.length > 0) {
         await exportPayrollEntriesDirect({
@@ -431,7 +506,7 @@ export default function PayrollTable({ month, year }) {
             employee_code: r.employee?.employee_code || "",
             employee_name: r.employee?.employee_name || "",
             salary_head: r.salaryHead?.salary_head || "",
-            amount: r.amount || 0,
+            amount: parseFloat(r.amount) || 0,
             remarks: r.remarks || "",
             month: month,
             year: year
@@ -506,7 +581,7 @@ export default function PayrollTable({ month, year }) {
         <Stack direction="row" spacing={1.5} alignItems="center" sx={{ flexWrap: "wrap", gap: 1 }}>
           <Chip
             icon={<AccountBalanceWalletIcon />}
-            label={`Total: ₹${totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            label={`Total: ${(totalAmount % 1 === 0) ? Math.round(totalAmount) : (Math.round(totalAmount * 100) / 100)}`}
             color="primary"
             variant="filled"
             sx={{ fontWeight: 800, fontSize: "0.9rem", py: 2 }}

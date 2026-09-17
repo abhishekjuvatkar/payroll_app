@@ -375,12 +375,12 @@ def build_payroll_workbook(rows: list, month: Any, year: Any):
         cell.border = thin_border
     ws.row_dimensions[1].height = 26
 
-    total_amount = 0.0
-
-    for row_idx, r in enumerate(rows, start=2):
-        emp_code = r.get("employee_code") or ""
-        emp_name = r.get("employee_name") or ""
-        sal_head = r.get("salary_head") or ""
+    # 1. Deduplicate rows, aggregate amounts, join remarks, and ignore zero amounts
+    deduped_map = {}
+    for r in rows:
+        emp_code = (r.get("employee_code") or "").strip()
+        emp_name = (r.get("employee_name") or "").strip()
+        sal_head = (r.get("salary_head") or "").strip()
         r_month = r.get("month", month)
         r_year = r.get("year", year)
         
@@ -389,11 +389,49 @@ def build_payroll_workbook(rows: list, month: Any, year: Any):
             val = float(raw_val)
         except Exception:
             val = 0.0
-        total_amount += val
+            
+        # Ignore if amount is 0 (zero)
+        if val <= 0:
+            continue
+            
+        remarks = (r.get("remarks") or "").strip()
         
-        remarks = r.get("remarks") or ""
+        # Deduplication key by employee identifier and salary head
+        key_emp = emp_code.upper() if emp_code and emp_code.upper() != emp_name.upper() else emp_name.upper()
+        dedup_key = (key_emp, sal_head.upper(), str(r_month), str(r_year))
+        
+        if dedup_key in deduped_map:
+            existing = deduped_map[dedup_key]
+            existing["val"] += val
+            if remarks and remarks not in existing["remarks"]:
+                existing["remarks"] = f"{existing['remarks']}; {remarks}" if existing["remarks"] else remarks
+        else:
+            deduped_map[dedup_key] = {
+                "emp_code": emp_code,
+                "emp_name": emp_name,
+                "sal_head": sal_head,
+                "month": r_month,
+                "year": r_year,
+                "val": val,
+                "remarks": remarks
+            }
 
-        row_data = [emp_code, emp_name, sal_head, r_month, r_year, val, remarks]
+    deduped_rows = list(deduped_map.values())
+    total_amount = 0.0
+
+    for row_idx, item in enumerate(deduped_rows, start=2):
+        val = item["val"]
+        total_amount += val
+
+        row_data = [
+            item["emp_code"],
+            item["emp_name"],
+            item["sal_head"],
+            item["month"],
+            item["year"],
+            val,
+            item["remarks"]
+        ]
         ws.append(row_data)
 
         # Apply cell formats
@@ -405,7 +443,7 @@ def build_payroll_workbook(rows: list, month: Any, year: Any):
         
         amount_cell = ws.cell(row=row_idx, column=6)
         amount_cell.alignment = right_align
-        amount_cell.number_format = "#,##0.00"
+        amount_cell.number_format = "0"
         
         ws.cell(row=row_idx, column=7).alignment = left_align
 
@@ -419,18 +457,19 @@ def build_payroll_workbook(rows: list, month: Any, year: Any):
         ws.row_dimensions[row_idx].height = 20
 
     # Total Summary Row
-    if rows:
-        total_row_idx = len(rows) + 2
+    if deduped_rows:
+        total_row_idx = len(deduped_rows) + 2
         ws.cell(row=total_row_idx, column=1, value="")
         ws.cell(row=total_row_idx, column=2, value="TOTAL").font = bold_font
-        ws.cell(row=total_row_idx, column=3, value=f"{len(rows)} Entries").font = bold_font
+        ws.cell(row=total_row_idx, column=3, value=f"{len(deduped_rows)} Entries").font = bold_font
         ws.cell(row=total_row_idx, column=4, value="")
         ws.cell(row=total_row_idx, column=5, value="")
         
-        tot_cell = ws.cell(row=total_row_idx, column=6, value=total_amount)
+        tot_val = int(round(total_amount)) if round(total_amount, 2) == round(total_amount) else round(total_amount, 2)
+        tot_cell = ws.cell(row=total_row_idx, column=6, value=tot_val)
         tot_cell.font = bold_font
         tot_cell.alignment = right_align
-        tot_cell.number_format = "#,##0.00"
+        tot_cell.number_format = "0"
         
         ws.cell(row=total_row_idx, column=7, value="")
 

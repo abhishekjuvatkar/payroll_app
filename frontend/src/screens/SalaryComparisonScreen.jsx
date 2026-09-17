@@ -64,16 +64,17 @@ import {
   syncPayrollFromComparison
 } from "../services/api";
 
-// Format Indian Rupee currency
+// Clean unformatted number format (e.g. 143600 instead of 1,43,600.00)
 const formatCurrency = (val) => {
-  if (val === null || val === undefined || isNaN(val)) return "₹0.00";
+  if (val === null || val === undefined || isNaN(val) || val === "") return "0";
   const num = Number(val);
+  if (num === 0) return "0";
   const isNeg = num < 0;
-  const absFormatted = Math.abs(num).toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
-  return isNeg ? `-₹${absFormatted}` : `₹${absFormatted}`;
+  const absNum = Math.abs(num);
+  const formatted = (absNum % 1 === 0)
+    ? String(Math.round(absNum))
+    : String(Math.round(absNum * 100) / 100);
+  return isNeg ? `-${formatted}` : formatted;
 };
 
 // Helper for employee avatar initials
@@ -88,7 +89,7 @@ const getInitials = (name) => {
 // Helper for status chips with clear distinction for data present in Current Month but missing in Samarth
 const renderStatusChip = (status, isTotal = false) => {
   if (status === "MATCH") {
-    return <Chip label="MATCH (₹0)" size="small" color="success" sx={{ fontWeight: 800, fontSize: "0.75rem" }} />;
+    return <Chip label="MATCH (0)" size="small" color="success" sx={{ fontWeight: 800, fontSize: "0.75rem" }} />;
   }
   if (status === "MISMATCH") {
     return (
@@ -287,14 +288,33 @@ export default function SalaryComparisonScreen() {
     }
   };
 
-  // Base One-Time Entries with dynamic fallback
+const AUTO_CALCULATED_HEADS = new Set([
+  "BASIC", "BASIC PAY", "DEARNESS ALLOWANCE", "DEARNESS ALLOWANCE (DA)", "DA",
+  "HOUSE RENT ALLOWANCE", "HOUSE RENT ALLOWANCE (HRA)", "HRA",
+  "TRANSPORT ALLOWANCE", "TRANSPORT ALLOWANCE (TA)", "TA", "TPTA",
+  "DA ON TA", "DA ON TPTA", "DA(TA)",
+  "ARREARS ON SALARY", "ARREARS", "ARREAR ON SALARY", "ARREARS_SALARY",
+  "GROSS / TOTAL EARNINGS", "TOTAL EARNINGS", "GROSS", "GROSS SALARY",
+  "TOTAL DEDUCTIONS", "DEDUCTIONS", "NET PAY", "NET AMOUNT",
+  "GROSS WITH EMPLOYER", "DEDUCTION WITH EMPLOYER"
+]);
+
+const isAutoCalculatedHead = (headName) => {
+  if (!headName) return false;
+  const upper = headName.trim().toUpperCase();
+  if (AUTO_CALCULATED_HEADS.has(upper)) return true;
+  const clean = upper.replace(/\s*\([^)]*\)/g, "").trim();
+  return AUTO_CALCULATED_HEADS.has(clean);
+};
+
+  // Base One-Time Entries with dynamic fallback (strictly ignoring rows where Current Month is 0 or auto-calculated heads)
   const allOneTimeEntries = useMemo(() => {
+    let list = [];
     if (comparisonResult?.one_time_entries && comparisonResult.one_time_entries.length > 0) {
-      return comparisonResult.one_time_entries;
-    }
-    if (comparisonResult?.flat_comparison_rows) {
-      return comparisonResult.flat_comparison_rows
-        .filter((r) => !r.is_total && Math.abs(r.difference) >= 0.01)
+      list = comparisonResult.one_time_entries;
+    } else if (comparisonResult?.flat_comparison_rows) {
+      list = comparisonResult.flat_comparison_rows
+        .filter((r) => !r.is_total && Math.abs(r.difference) >= 0.01 && Number(r.current_value || 0) >= 0.01 && !isAutoCalculatedHead(r.salary_head))
         .map((r, idx) => {
           const isDeduction = /TAX|DED|NPS|FEE|CHARGES|GPF|RECOVERY|CLUB/i.test(r.salary_head);
           const entryType = r.is_employer_contribution
@@ -304,10 +324,8 @@ export default function SalaryComparisonScreen() {
             : "Earning Adjustment";
           const rem =
             r.status === "NOT_AVAILABLE_IN_SAMARTH"
-              ? `One-time adjustment for ${r.salary_head}: present in Current Month (₹${Number(r.current_value).toFixed(2)}) but missing in Samarth`
-              : r.status === "NOT_AVAILABLE_IN_CURRENT"
-              ? `One-time adjustment for ${r.salary_head}: present in Samarth (₹${Number(r.samarth_value).toFixed(2)}) but missing in Current Month`
-              : `One-time adjustment for ${r.salary_head}: variance of ₹${Math.abs(r.difference).toFixed(2)}`;
+              ? `One-time adjustment for ${r.salary_head}: present in Current Month (${formatCurrency(r.current_value)}) but missing in Samarth`
+              : `One-time adjustment for ${r.salary_head}: variance of ${formatCurrency(Math.abs(r.difference))}`;
           return {
             s_no: idx + 1,
             employee_id: r.employee_id,
@@ -318,13 +336,22 @@ export default function SalaryComparisonScreen() {
             current_value: r.current_value,
             samarth_value: r.samarth_value,
             difference: r.difference,
-            adjustment_amount: Math.abs(r.difference),
+            adjustment_amount: r.current_value || Math.abs(r.difference),
             adjustment_direction: r.difference > 0 ? "Current > Samarth (+)" : "Samarth > Current (-)",
             remarks: rem
           };
         });
     }
-    return [];
+
+    // Strictly ignore records if current month is 0 (zero) or auto-calculated recurring heads (DA, DA on TA, HRA, Basic Pay, etc.)
+    return list
+      .filter((item) => {
+        const curr = Number(item.current_value || 0);
+        if (curr <= 0 || isNaN(curr)) return false;
+        if (isAutoCalculatedHead(item.salary_head)) return false;
+        return true;
+      })
+      .map((item, idx) => ({ ...item, s_no: idx + 1 }));
   }, [comparisonResult]);
 
   // Handle 1-Click Push directly into One Time Payroll Entry Database
@@ -1078,7 +1105,7 @@ export default function SalaryComparisonScreen() {
                                 label={
                                   emp.mismatch_count > 0
                                     ? `${emp.mismatch_count} Mismatch${emp.mismatch_count > 1 ? "es" : ""}`
-                                    : "MATCH (₹0)"
+                                    : "MATCH (0)"
                                 }
                                 color={emp.mismatch_count > 0 ? "error" : "success"}
                                 size="small"

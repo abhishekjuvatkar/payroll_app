@@ -20,7 +20,11 @@ CATEGORY_NAMES = {
 # Metadata columns to EXCLUDE from salary heads (Personal info, workflow, system identifiers)
 METADATA_COLUMNS = {
     "S_NO.", "S NO", "SL. NO.", "SL NO", "SL.NO.", "SL NO.", "SR. NO.", "SR NO", "S.NO.", "S NO", "NO", "INDEX",
-    "ID", "EMPLOYEE ID", "EMP ID", "EMPID", "NAME", "EMPLOYEE NAME", "PARTICULARS", "NAME OF EMPLOYEE", "EMPLOYEE_NAME",
+    "S_NO", "SL_NO", "SR_NO", "SLNO", "SRNO",
+    "ID", "EMPLOYEE ID", "EMP ID", "EMPID", "EMPLOYEE_ID", "EMP_ID",
+    "EMP CODE", "EMP_CODE", "EMPCODE", "EMPLOYEE CODE", "EMPLOYEE_CODE", "EMP. CODE", "CODE",
+    "EMP NO", "EMP_NO", "EMPNO", "EMPLOYEE NO", "EMPLOYEE_NO", "EMPLOYEE NUMBER",
+    "NAME", "EMPLOYEE NAME", "PARTICULARS", "NAME OF EMPLOYEE", "NAME OF THE EMPLOYEE", "EMPLOYEE_NAME",
     "GROUP", "REPORTING OU", "DEPARTMENT", "DESIGNATION", "CATEGORY", "EMPLOYEE TYPE", "EMPLOYEE NATURE",
     "GUARDIAN NAME", "DATE OF BIRTH", "DOB", "DATE OF JOINING", "DOJ", "DATE OF SUPERANNUATION", "DATE OF RETIREMENT",
     "DATE OF NEXT INCREMENT", "PAY MATRIX CELL", "PAY COMMISSION", "LEVEL", "LEDGER NO.", "PERSONAL EMAIL", "EMAIL",
@@ -54,13 +58,24 @@ CANONICAL_HEAD_MAP: Dict[str, Tuple[str, str]] = {
     "TPTA": ("TA", "Transport Allowance (TA)"),
     "DA ON TPTA": ("DA_ON_TA", "DA on TA"),
     "DA ON TA": ("DA_ON_TA", "DA on TA"),
+    "DA(TA)": ("DA_ON_TA", "DA on TA"),
     "DEAN ALLOWANCE": ("DEAN_ALLOWANCE", "Dean Allowance"),
     "WARDEN ALLOWANCE": ("WARDEN_ALLOWANCE", "Warden Allowance"),
     "LEAVE ENCASHMENT": ("LEAVE_ENCASHMENT", "Leave Encashment"),
     "ARREARS ON SALARY": ("ARREARS_SALARY", "Arrears on Salary"),
     "ARREARS": ("ARREARS_SALARY", "Arrears on Salary"),
+    "BASIC ARREAR": ("BASIC_ARREAR", "Basic Arrear"),
+    "BASIC ARREARS": ("BASIC_ARREAR", "Basic Arrear"),
+    "DA ARREAR": ("DA_ARREAR", "DA Arrear"),
+    "DA ARREARS": ("DA_ARREAR", "DA Arrear"),
+    "HRA ARREAR": ("HRA_ARREAR", "HRA Arrear"),
+    "HRA ARREARS": ("HRA_ARREAR", "HRA Arrear"),
+    "TA ARREAR": ("TA_ARREAR", "TA Arrear"),
+    "TA ARREARS": ("TA_ARREAR", "TA Arrear"),
     "CHILDREN EDUCATION ALLOWANCE": ("CEA", "Children Education Allowance"),
-    "INCOME FROM CONSULTANCY PROJECT": ("CONSULTANCY", "Income from Consultancy Project"),
+    "CHILD EDUCATION ALLOWANCE": ("CEA", "Children Education Allowance"),
+    "INCOME FROM CONSULTANCY PROJECT": ("CONSULTANCY", "Income from consultancy project"),
+    "CONSULTANCY": ("CONSULTANCY", "Income from consultancy project"),
     "HIGHER EDUCATION INCENTIVE": ("HIGHER_EDU_INCENTIVE", "Higher Education Incentive"),
     "MOBILE CHARGE ALLOWANCE": ("MOBILE_ALLOWANCE", "Mobile Charge Allowance"),
     "OTHER EARNINGS": ("OTHER_EARNINGS", "Other Earnings"),
@@ -68,10 +83,13 @@ CANONICAL_HEAD_MAP: Dict[str, Tuple[str, str]] = {
     # Deductions
     "TAX DED. AT SOURCE": ("INCOME_TAX", "Income Tax (TDS)"),
     "INCOME TAX": ("INCOME_TAX", "Income Tax (TDS)"),
+    "INCOME TAX (TDS)": ("INCOME_TAX", "Income Tax (TDS)"),
     "TDS": ("INCOME_TAX", "Income Tax (TDS)"),
     "NATIONAL PENSION SCHEME": ("NPS", "National Pension Scheme (NPS)"),
     "NATIONAL PENSION SCHEME (NPS)": ("NPS", "National Pension Scheme (NPS)"),
     "NPS": ("NPS", "National Pension Scheme (NPS)"),
+    "NPS ARREAR": ("NPS_ARREAR", "NPS Arrear"),
+    "NPS ARREARS": ("NPS_ARREAR", "NPS Arrear"),
     "PROFESSIONAL TAX": ("PROFESSIONAL_TAX", "Professional Tax"),
     "PTAX": ("PROFESSIONAL_TAX", "Professional Tax"),
     "LICENSE FEE": ("LICENSE_FEE", "License Fee"),
@@ -83,12 +101,29 @@ CANONICAL_HEAD_MAP: Dict[str, Tuple[str, str]] = {
     "IIT DH CLUB SUBSCRIPTION": ("CLUB_SUBSCRIPTION", "IIT DH Club Subscription"),
     "CLUB": ("CLUB_SUBSCRIPTION", "IIT DH Club Subscription"),
     "ELECTRICITY FIXED CHARGES": ("ELECTRICITY_FIXED", "Electricity Fixed Charges"),
-    "GPF": ("GPF", "GPF"),
-    "MEDICAL RECOVERY": ("MEDICAL_RECOVERY", "Medical Recovery"),
-    "RECOVERY OF OFFICE": ("RECOVERY_OFFICE", "Recovery of Office"),
+    "GPF": ("GPF", "General Provident Fund (GPF)"),
+    "GENERAL PROVIDENT FUND (GPF)": ("GPF", "General Provident Fund (GPF)"),
+    "MEDICAL RECOVERY": ("MEDICAL_RECOVERY", "Medical recovery"),
+    "RECOVERY OF OFFICE": ("RECOVERY_OFFICE", "Recovery Of Office"),
     "NPS RECOVERY": ("NPS_RECOVERY", "NPS Recovery"),
-    "ACCOMMODATION CHARGES": ("ACCOMMODATION_CHARGES", "Accommodation Charges"),
+    "ACCOMMODATION CHARGES": ("ACCOMMODATION_CHARGES", "Accomodation Charges"),
+    "ACCOMODATION CHARGES": ("ACCOMMODATION_CHARGES", "Accomodation Charges"),
     "OTHER DEDUCTIONS": ("OTHER_DEDUCTIONS", "Other Deductions"),
+
+    # Employer Contributions
+    "CPF EMPLOYER CONTRIBUTION": ("CPF_EMPLOYER_CONTRIBUTION", "CPF Employer Contribution"),
+    "GPF EMPLOYER CONTRIBUTION": ("GPF_EMPLOYER_CONTRIBUTION", "GPF Employer Contribution"),
+    "NPS EMPLOYER CONTRIBUTION": ("NPS_EMPLOYER_CONTRIBUTION", "NPS Employer Contribution"),
+    "NPS ARREAR EMPLOYER CONTRIBUTION": ("NPS_ARREAR_EMPLOYER", "NPS Arrear Employer Contribution"),
+    "NPS RECOVERY EMPLOYER CONTRIBUTION": ("NPS_RECOVERY_EMPLOYER", "NPS Recovery Employer Contribution"),
+    "GPF ARREAR EMPLOYER CONTRIBUTION": ("GPF_ARREAR_EMPLOYER", "GPF Arrear Employer Contribution"),
+    "GPF RECOVERY EMPLOYER CONTRIBUTION": ("GPF_RECOVERY_EMPLOYER", "GPF Recovery Employer Contribution"),
+    "CPF ARREAR EMPLOYER CONTRIBUTION": ("CPF_ARREAR_EMPLOYER", "CPF Arrear Employer Contribution"),
+    "CPF RECOVERY EMPLOYER CONTRIBUTION": ("CPF_RECOVERY_EMPLOYER", "CPF Recovery Employer Contribution"),
+    "EPF ARREAR EMPLOYER CONTRIBUTION": ("EPF_ARREAR_EMPLOYER", "EPF Arrear Employer Contribution"),
+    "EPF RECOVERY EMPLOYER CONTRIBUTION": ("EPF_RECOVERY_EMPLOYER", "EPF Recovery Employer Contribution"),
+    "UCPF ARREAR EMPLOYER CONTRIBUTION": ("UCPF_ARREAR_EMPLOYER", "UCPF Arrear Employer Contribution"),
+    "UCPF RECOVERY EMPLOYER CONTRIBUTION": ("UCPF_RECOVERY_EMPLOYER", "UCPF Recovery Employer Contribution"),
     
     # Totals
     "TOTAL EARNINGS": ("TOTAL_EARNINGS", "Gross / Total Earnings"),
@@ -120,23 +155,29 @@ def clean_numeric_value(val: Any) -> float:
     """
     Safely clean and parse numeric salary values.
     Handles None, empty strings, '-', commas, currency symbols, and text numbers.
+    Normalizes formatted strings (e.g. '1,43,600.00' -> 143600.0) for accurate integer comparison.
     Blank/null defaults to 0.0.
     """
     if val is None:
         return 0.0
     
     if isinstance(val, (int, float)):
-        return float(val)
+        if round(val, 2) == round(val):
+            return float(round(val))
+        return round(float(val), 2)
     
     s = str(val).strip()
     if not s or s == "-" or s.lower() == "nil" or s.lower() == "na" or s.lower() == "n/a" or s.lower() == "null":
         return 0.0
     
-    # Remove currency symbols and commas
+    # Remove currency symbols, commas, and whitespace
     s = re.sub(r"[₹$,\s]", "", s)
     
     try:
-        return float(s)
+        v = float(s)
+        if round(v, 2) == round(v):
+            return float(round(v))
+        return round(v, 2)
     except ValueError:
         return 0.0
 
@@ -238,10 +279,29 @@ def disambiguate_headers(raw_headers: List[Any]) -> List[Tuple[str, str, str]]:
         
     return result
 
+def is_id_column(col_name: str) -> bool:
+    """Check if header represents employee code/id."""
+    if not col_name:
+        return False
+    norm = normalize_text(col_name).upper().replace(".", "").replace("_", " ")
+    norm = re.sub(r"\s+", " ", norm).strip()
+    return norm in {
+        "ID", "EMP ID", "EMPID", "EMPLOYEE ID", "EMPLOYEEID",
+        "EMP CODE", "EMPCODE", "EMPLOYEE CODE", "EMPLOYEECODE",
+        "EMP NO", "EMPNO", "EMPLOYEE NO", "EMPLOYEENO", "EMPLOYEE NUMBER",
+        "PFMS ID", "PFMSID", "CODE"
+    }
+
 def is_particulars_column(col_name: str) -> bool:
     """Check if header represents employee name/particulars."""
-    norm = normalize_text(col_name).upper()
-    return norm in ["PARTICULARS", "EMPLOYEE", "EMPLOYEE NAME", "NAME", "NAME OF EMPLOYEE", "EMPLOYEE_NAME"]
+    if not col_name:
+        return False
+    norm = normalize_text(col_name).upper().replace(".", "").replace("_", " ")
+    norm = re.sub(r"\s+", " ", norm).strip()
+    return norm in {
+        "PARTICULARS", "EMPLOYEE", "EMPLOYEE NAME", "EMPLOYEENAME", "NAME",
+        "NAME OF EMPLOYEE", "NAME OF THE EMPLOYEE", "EMPLOYEE PARTICULARS"
+    }
 
 def is_total_or_footer_row(row_val: str) -> bool:
     """Detect if a row is a summary/total footer row rather than an employee."""
@@ -290,7 +350,7 @@ def parse_excel_file(file_content: bytes, file_name: str = "") -> Dict[str, Any]
             non_empty_cells = [c for c in row if c is not None and str(c).strip() != ""]
             if len(non_empty_cells) >= 2:
                 # Check if any cell matches standard header keywords
-                if any(is_particulars_column(str(c)) or "SL" in str(c).upper() or "BASIC" in str(c).upper() or "GROSS" in str(c).upper() for c in non_empty_cells):
+                if any(is_id_column(str(c)) or is_particulars_column(str(c)) or "SL" in str(c).upper() or "BASIC" in str(c).upper() or "GROSS" in str(c).upper() for c in non_empty_cells):
                     header_row_idx = idx
                     raw_headers = [c for c in row]
                     break
@@ -310,20 +370,18 @@ def parse_excel_file(file_content: bytes, file_name: str = "") -> Dict[str, Any]
         month_col_idx = -1
         
         for c_idx, h in enumerate(header_strings):
-            u_h = h.upper()
-            if u_h in ["ID", "EMPLOYEE ID", "EMP ID", "PFMS ID"]:
+            if is_id_column(h):
                 id_col_idx = c_idx
             elif is_particulars_column(h):
                 name_col_idx = c_idx
-            elif u_h in ["CATEGORY", "EMPLOYEE CATEGORY", "GROUP"]:
+            elif normalize_text(h).upper() in ["CATEGORY", "EMPLOYEE CATEGORY", "GROUP"]:
                 category_col_idx = c_idx
-            elif u_h in ["YEAR"]:
+            elif normalize_text(h).upper() in ["YEAR"]:
                 year_col_idx = c_idx
-            elif u_h in ["MONTH"]:
+            elif normalize_text(h).upper() in ["MONTH"]:
                 month_col_idx = c_idx
                 
         if name_col_idx == -1:
-            # Fallback to id column or first column with strings
             name_col_idx = id_col_idx if id_col_idx != -1 else 1 if len(header_strings) > 1 else 0
             
         # Disambiguate value columns
@@ -360,13 +418,19 @@ def parse_excel_file(file_content: bytes, file_name: str = "") -> Dict[str, Any]
             if not row or all(c is None or str(c).strip() == "" for c in row):
                 continue
                 
-            raw_name = row[name_col_idx] if name_col_idx < len(row) else None
-            emp_display_name = normalize_text(raw_name)
-            if not emp_display_name or is_total_or_footer_row(emp_display_name):
-                continue
-                
+            raw_name = row[name_col_idx] if name_col_idx != -1 and name_col_idx < len(row) else None
             raw_id = row[id_col_idx] if id_col_idx != -1 and id_col_idx < len(row) else None
-            emp_id_str = normalize_text(raw_id) if raw_id else normalize_employee_name(emp_display_name)
+            
+            emp_display_name = normalize_text(raw_name) if raw_name is not None else ""
+            emp_id_str = normalize_text(raw_id) if raw_id is not None else ""
+            
+            if not emp_display_name and emp_id_str:
+                emp_display_name = emp_id_str
+            if not emp_id_str and emp_display_name:
+                emp_id_str = normalize_employee_name(emp_display_name)
+                
+            if not emp_display_name or is_total_or_footer_row(emp_display_name) or is_total_or_footer_row(emp_id_str):
+                continue
             
             # Check period in row
             if year_col_idx != -1 and year_col_idx < len(row) and row[year_col_idx]:

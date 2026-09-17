@@ -30,8 +30,119 @@ THIN_BORDER = Border(
     bottom=Side(style='thin', color='CBD5E1')
 )
 
-CURRENCY_FORMAT = '"₹"#,##0.00;[Red]("-₹"#,##0.00);"-"'
-INTEGER_FORMAT = '#,##0'
+CURRENCY_FORMAT = '0;[Red](-0);"-"'
+INTEGER_FORMAT = '0'
+
+def fmt_clean_num(v: Any) -> str:
+    if v is None:
+        return "0"
+    try:
+        f = float(v)
+        if round(f, 2) == round(f):
+            return str(int(round(f)))
+        return f"{round(f, 2):.2f}".rstrip("0").rstrip(".")
+    except Exception:
+        return str(v)
+
+def to_clean_num(v: float) -> Any:
+    if round(v, 2) == round(v):
+        return int(round(v))
+    return round(v, 2)
+
+AUTO_CALCULATED_HEAD_KEYS = {
+    "BASIC", "DA", "HRA", "TA", "DA_ON_TA",
+    "ARREARS_SALARY", "ARREARS",
+    "TOTAL_EARNINGS", "TOTAL_DEDUCTIONS", "NET_PAY",
+    "GROSS_WITH_EMPLOYER", "DEDUCTION_WITH_EMPLOYER"
+}
+
+AUTO_CALCULATED_NAMES = {
+    "BASIC PAY", "BASIC",
+    "DEARNESS ALLOWANCE", "DEARNESS ALLOWANCE (DA)", "DA",
+    "HOUSE RENT ALLOWANCE", "HOUSE RENT ALLOWANCE (HRA)", "HRA",
+    "TRANSPORT ALLOWANCE", "TRANSPORT ALLOWANCE (TA)", "TA", "TPTA",
+    "DA ON TA", "DA ON TPTA", "DA(TA)", "DA ON TRANSPORT ALLOWANCE",
+    "ARREARS ON SALARY", "ARREARS", "ARREAR ON SALARY", "ARREAR",
+    "GROSS / TOTAL EARNINGS", "TOTAL EARNINGS", "GROSS", "GROSS SALARY",
+    "TOTAL DEDUCTIONS", "DEDUCTIONS", "NET PAY", "NET AMOUNT",
+    "GROSS WITH EMPLOYER", "DEDUCTION WITH EMPLOYER"
+}
+
+def is_auto_calculated_head(canonical_k: str, head_n: str) -> bool:
+    if (canonical_k or "").upper() in AUTO_CALCULATED_HEAD_KEYS:
+        return True
+    u_n = (head_n or "").strip().upper()
+    if u_n in AUTO_CALCULATED_NAMES:
+        return True
+    clean = re.sub(r"\s*\([^)]*\)", "", u_n).strip()
+    if clean in AUTO_CALCULATED_NAMES:
+        return True
+    return False
+
+import itertools
+
+def get_name_variations(name: str) -> Set[str]:
+    """
+    Generates unambiguous permutations, initials, and normalized aliases for Indian names.
+    Guarantees that pure initials (like 'A G', 'G A') are NEVER generated, preventing cross-employee collisions.
+    e.g. 'Ravikumar Chettiannan' -> 'RAVIKUMAR CHETTIANNAN', 'CHETTIANNAN RAVIKUMAR', 'C RAVIKUMAR', 'RAVIKUMAR C'
+    e.g. 'Hemanth Kumar Chinthapalli' -> 'HEMANTH KUMAR CHINTHAPALLI', 'CHINTHAPALLI HEMANTH KUMAR', 'C HEMANTH KUMAR', etc.
+    """
+    if not name:
+        return set()
+
+    clean = re.sub(r"^(dr\.|prof\.|mr\.|mrs\.|ms\.|shri|smt\.)\s+", "", name.strip(), flags=re.IGNORECASE)
+    clean = re.sub(r"[^A-Za-z0-9\s]+", " ", clean)
+    clean = re.sub(r"\s+", " ", clean).strip().upper()
+    
+    if not clean:
+        return set()
+
+    tokens = [t for t in clean.split() if t]
+    if not tokens:
+        return set()
+
+    variations = set()
+    variations.add(clean)
+
+    if len(tokens) == 1:
+        return variations
+
+    # Sorted tokens
+    sorted_tokens = " ".join(sorted(tokens))
+    variations.add(sorted_tokens)
+
+    # Permutations for 2 or 3 tokens (e.g. Ravikumar Chettiannan -> Chettiannan Ravikumar)
+    if len(tokens) <= 3:
+        for p in itertools.permutations(tokens):
+            variations.add(" ".join(p))
+
+    # Single-letter token removal (e.g. 'AMAR K GAONKAR' -> 'AMAR GAONKAR')
+    multi_char_tokens = [t for t in tokens if len(t) > 1]
+    if len(multi_char_tokens) >= 2:
+        variations.add(" ".join(multi_char_tokens))
+        variations.add(" ".join(sorted(multi_char_tokens)))
+        if len(multi_char_tokens) <= 3:
+            for p in itertools.permutations(multi_char_tokens):
+                variations.add(" ".join(p))
+
+    # Initial variations: ONLY 1 initial combined with full word tokens (len >= 3)
+    # NEVER generate pure initials (e.g. 'A G' or 'G A')
+    if len(tokens) >= 2:
+        rest_1 = " ".join(tokens[1:])
+        rest_0 = " ".join(tokens[:-1])
+        first_init = f"{tokens[0][0]} {rest_1}"
+        last_init = f"{rest_0} {tokens[-1][0]}"
+        init_first_inv = f"{rest_1} {tokens[0][0]}"
+        init_last_inv = f"{tokens[-1][0]} {rest_0}"
+        
+        for cand in [first_init, last_init, init_first_inv, init_last_inv]:
+            parts = cand.split()
+            if any(len(p) >= 3 for p in parts) and len(cand) >= 5:
+                variations.add(cand)
+
+    # Strict filter: Must have at least 2 parts, total length >= 5, and at least one word >= 3 chars
+    return {v for v in variations if len(v) >= 5 and len(v.split()) >= 2 and any(len(p) >= 3 for p in v.split())}
 
 def clean_employee_lookup_key(name: str) -> str:
     """
@@ -68,21 +179,38 @@ def compare_current_vs_samarth(
     """
     all_cat_keys = set(current_categories.keys()).union(set(samarth_categories.keys()))
     
-    # 0. Lookup official Employee Master codes from database
+    # 0. Lookup official Employee Master codes from database with strict collision prevention
     db_emp_codes: Dict[str, str] = {}
     if db is not None:
         try:
             from app.models import Employee
-            for e in db.query(Employee).all():
+            collisions = set()
+            all_db_emps = db.query(Employee).all()
+            for e in all_db_emps:
+                code = (e.employee_code or "").strip().upper()
+                raw_name = (e.employee_name or "").strip().upper()
                 norm_e = normalize_employee_name(e.employee_name)
                 clean_e = clean_employee_lookup_key(e.employee_name)
-                if norm_e:
-                    db_emp_codes[norm_e] = e.employee_code
-                if clean_e:
-                    db_emp_codes[clean_e] = e.employee_code
-                db_emp_codes[e.employee_name.strip().upper()] = e.employee_code
-                if e.employee_code:
-                    db_emp_codes[e.employee_code.strip().upper()] = e.employee_code
+
+                if code and code != raw_name:
+                    db_emp_codes[code] = code
+                    if raw_name:
+                        db_emp_codes[raw_name] = code
+                    if norm_e:
+                        db_emp_codes[norm_e] = code
+                    if clean_e and len(clean_e.split()) >= 2:
+                        db_emp_codes[clean_e] = code
+
+                    for var in get_name_variations(e.employee_name):
+                        if var:
+                            if var in db_emp_codes and db_emp_codes[var] != code:
+                                collisions.add(var)
+                            else:
+                                db_emp_codes[var] = code
+                                
+            # Discard any ambiguous variations that matched multiple employees
+            for c in collisions:
+                db_emp_codes.pop(c, None)
         except Exception:
             pass
 
@@ -91,6 +219,28 @@ def compare_current_vs_samarth(
     samarth_emp_registry: Dict[str, Dict[str, Any]] = {}
     all_unique_employees: Dict[str, Dict[str, Any]] = {}
     all_known_columns: Dict[str, Dict[str, Any]] = {}
+
+    def resolve_emp_code(raw_id: str, raw_name: str, norm_n: str, clean_n: str) -> str:
+        clean_raw_id = (raw_id or "").strip().upper()
+        if clean_raw_id:
+            if clean_raw_id in db_emp_codes:
+                return db_emp_codes[clean_raw_id]
+            if re.match(r"^[A-Z]{1,4}\d{2,6}[A-Z]?$", clean_raw_id):
+                return clean_raw_id
+
+        for var in get_name_variations(raw_name):
+            if var in db_emp_codes:
+                return db_emp_codes[var]
+
+        for var in get_name_variations(norm_n):
+            if var in db_emp_codes:
+                return db_emp_codes[var]
+
+        return (
+            db_emp_codes.get(clean_n) or
+            db_emp_codes.get(raw_name.strip().upper()) or
+            (clean_raw_id if clean_raw_id and clean_raw_id != raw_name.strip().upper() else clean_raw_id)
+        )
     
     for cat_key in all_cat_keys:
         curr_cat = current_categories.get(cat_key, {})
@@ -98,18 +248,12 @@ def compare_current_vs_samarth(
             all_known_columns[col["key"]] = col
 
         for emp in curr_cat.get("employees", []):
-            emp_id = emp["employee_id"]
-            norm_name = emp.get("normalized_name") or normalize_employee_name(emp["employee_name"])
-            clean_name = clean_employee_lookup_key(emp["employee_name"])
+            emp_id = emp.get("employee_id") or ""
+            raw_name = emp.get("employee_name") or ""
+            norm_name = emp.get("normalized_name") or normalize_employee_name(raw_name)
+            clean_name = clean_employee_lookup_key(raw_name)
             
-            # Prefer official database employee code
-            official_id = (
-                db_emp_codes.get(emp_id.strip().upper() if emp_id else "") or
-                db_emp_codes.get(norm_name) or
-                db_emp_codes.get(clean_name) or
-                db_emp_codes.get(emp["employee_name"].strip().upper()) or
-                emp_id
-            )
+            official_id = resolve_emp_code(emp_id, raw_name, norm_name, clean_name) or emp_id
             emp_info = {
                 **emp,
                 "employee_id": official_id,
@@ -124,10 +268,12 @@ def compare_current_vs_samarth(
             current_emp_registry[norm_name] = emp_info
             if clean_name:
                 current_emp_registry[clean_name] = emp_info
-            current_emp_registry[emp["employee_name"].strip().upper()] = emp_info
+            current_emp_registry[raw_name.strip().upper()] = emp_info
+            for var in get_name_variations(raw_name):
+                current_emp_registry[var] = emp_info
             
-            # Use clean_name or norm_name for deduplication key
-            primary_key = official_id or clean_name or norm_name
+            # Use official_id or clean_name for deduplication key
+            primary_key = official_id if (official_id and official_id != raw_name.strip().upper()) else (clean_name or norm_name)
             if primary_key not in all_unique_employees:
                 all_unique_employees[primary_key] = emp_info
 
@@ -136,18 +282,12 @@ def compare_current_vs_samarth(
             all_known_columns[col["key"]] = col
 
         for emp in sam_cat.get("employees", []):
-            emp_id = emp["employee_id"]
-            norm_name = emp.get("normalized_name") or normalize_employee_name(emp["employee_name"])
-            clean_name = clean_employee_lookup_key(emp["employee_name"])
+            emp_id = emp.get("employee_id") or ""
+            raw_name = emp.get("employee_name") or ""
+            norm_name = emp.get("normalized_name") or normalize_employee_name(raw_name)
+            clean_name = clean_employee_lookup_key(raw_name)
             
-            # Prefer official database employee code
-            official_id = (
-                db_emp_codes.get(emp_id.strip().upper() if emp_id else "") or
-                db_emp_codes.get(norm_name) or
-                db_emp_codes.get(clean_name) or
-                db_emp_codes.get(emp["employee_name"].strip().upper()) or
-                emp_id
-            )
+            official_id = resolve_emp_code(emp_id, raw_name, norm_name, clean_name) or emp_id
             emp_info = {
                 **emp,
                 "employee_id": official_id,
@@ -162,9 +302,11 @@ def compare_current_vs_samarth(
             samarth_emp_registry[norm_name] = emp_info
             if clean_name:
                 samarth_emp_registry[clean_name] = emp_info
-            samarth_emp_registry[emp["employee_name"].strip().upper()] = emp_info
+            samarth_emp_registry[raw_name.strip().upper()] = emp_info
+            for var in get_name_variations(raw_name):
+                samarth_emp_registry[var] = emp_info
             
-            primary_key = official_id or clean_name or norm_name
+            primary_key = official_id if (official_id and official_id != raw_name.strip().upper()) else (clean_name or norm_name)
             if primary_key not in all_unique_employees:
                 all_unique_employees[primary_key] = emp_info
             else:
@@ -218,19 +360,32 @@ def compare_current_vs_samarth(
         cat_key = emp_data.get("category_key", "staff")
         cat_name = emp_data.get("category_name", "Staff")
         
-        # Robust lookup across ID, exact normalized name, clean phonetic name, and raw upper name
-        curr_emp = (
-            current_emp_registry.get(emp_id) or
-            current_emp_registry.get(norm_name) or
-            current_emp_registry.get(clean_name) or
-            current_emp_registry.get(raw_upper)
-        )
-        sam_emp = (
-            samarth_emp_registry.get(emp_id) or
-            samarth_emp_registry.get(norm_name) or
-            samarth_emp_registry.get(clean_name) or
-            samarth_emp_registry.get(raw_upper)
-        )
+        # Robust lookup across ID, variations, exact normalized name, clean phonetic name, and raw upper name
+        curr_emp = current_emp_registry.get(emp_id)
+        if not curr_emp:
+            for var in get_name_variations(emp_name):
+                if var in current_emp_registry:
+                    curr_emp = current_emp_registry[var]
+                    break
+        if not curr_emp:
+            curr_emp = (
+                current_emp_registry.get(norm_name) or
+                current_emp_registry.get(clean_name) or
+                current_emp_registry.get(raw_upper)
+            )
+
+        sam_emp = samarth_emp_registry.get(emp_id)
+        if not sam_emp:
+            for var in get_name_variations(emp_name):
+                if var in samarth_emp_registry:
+                    sam_emp = samarth_emp_registry[var]
+                    break
+        if not sam_emp:
+            sam_emp = (
+                samarth_emp_registry.get(norm_name) or
+                samarth_emp_registry.get(clean_name) or
+                samarth_emp_registry.get(raw_upper)
+            )
         
         # Determine employee match status
         if curr_emp and sam_emp:
@@ -311,41 +466,12 @@ def compare_current_vs_samarth(
             else:
                 status = "MISMATCH"
 
-            # Count and generate one-time entries for non-total salary heads with any variance
+            # Count and track discrepancy stats
             has_discrepancy = (status in ["MISMATCH", "NOT_AVAILABLE_IN_SAMARTH", "NOT_AVAILABLE_IN_CURRENT"]) and (abs(diff) >= 0.01)
+            
             if has_discrepancy and not is_total:
                 emp_mismatch_count += 1
                 total_mismatches += 1
-                
-                # Generate One-Time Entry record
-                entry_type = "Deduction Adjustment" if any(w in head_name.upper() for w in ["TAX", "DED", "NPS", "FEE", "CHARGES", "GPF", "RECOVERY", "CLUB"]) else "Earning Adjustment"
-                if is_emp_contrib:
-                    entry_type = "Employer Cost Adjustment"
-                    
-                if status == "NOT_AVAILABLE_IN_SAMARTH":
-                    rem = f"One-time adjustment for {head_name}: present in Current Month (₹{curr_val:,.2f}) but missing in Samarth"
-                    direction = "Current > Samarth (+)"
-                elif status == "NOT_AVAILABLE_IN_CURRENT":
-                    rem = f"One-time adjustment for {head_name}: present in Samarth (₹{sam_val:,.2f}) but missing in Current Month"
-                    direction = "Samarth > Current (-)"
-                else:
-                    rem = f"One-time adjustment for {head_name}: variance of ₹{abs(diff):,.2f}"
-                    direction = "Current > Samarth (+)" if diff > 0 else "Samarth > Current (-)"
-
-                one_time_entries.append({
-                    "s_no": len(one_time_entries) + 1,
-                    "employee_id": emp_id,
-                    "employee_name": emp_name,
-                    "category": cat_name,
-                    "salary_head": head_name,
-                    "entry_type": entry_type,
-                    "current_value": curr_val,
-                    "samarth_value": sam_val,
-                    "difference": diff,
-                    "adjustment_amount": abs(diff),
-                    "adjustment_direction": direction,
-                    "remarks": rem
-                })
                 
                 # Track in head mismatch summary (EXCLUDING totals)
                 if head_name not in head_mismatch_stats:
@@ -359,6 +485,37 @@ def compare_current_vs_samarth(
                 head_mismatch_stats[head_name]["total_difference"] = round(
                     head_mismatch_stats[head_name]["total_difference"] + diff, 2
                 )
+
+                # Generate One-Time Entry record ONLY if:
+                # 1. Current Month has positive non-zero value (curr_val >= 0.01)
+                # 2. It is NOT an auto-calculated recurring head (DA, DA on TA, HRA, TA, Basic Pay)
+                # 3. It is NOT a calculated aggregate total
+                if curr_val >= 0.01 and not is_auto_calculated_head(col_key, head_name) and not is_total:
+                    entry_type = "Deduction Adjustment" if any(w in head_name.upper() for w in ["TAX", "DED", "NPS", "FEE", "CHARGES", "GPF", "RECOVERY", "CLUB"]) else "Earning Adjustment"
+                    if is_emp_contrib:
+                        entry_type = "Employer Cost Adjustment"
+                        
+                    if status == "NOT_AVAILABLE_IN_SAMARTH":
+                        rem = f"One-time adjustment for {head_name}: present in Current Month ({fmt_clean_num(curr_val)}) but missing in Samarth"
+                        direction = "Current > Samarth (+)"
+                    else:
+                        rem = f"One-time adjustment for {head_name}: variance of {fmt_clean_num(abs(diff))}"
+                        direction = "Current > Samarth (+)" if diff > 0 else "Samarth > Current (-)"
+
+                    one_time_entries.append({
+                        "s_no": len(one_time_entries) + 1,
+                        "employee_id": emp_id,
+                        "employee_name": emp_name,
+                        "category": cat_name,
+                        "salary_head": head_name,
+                        "entry_type": entry_type,
+                        "current_value": to_clean_num(curr_val),
+                        "samarth_value": to_clean_num(sam_val),
+                        "difference": to_clean_num(diff),
+                        "adjustment_amount": to_clean_num(curr_val),
+                        "adjustment_direction": direction,
+                        "remarks": rem
+                    })
                 
             if not is_total and not is_emp_contrib:
                 emp_current_total += curr_val
@@ -369,9 +526,9 @@ def compare_current_vs_samarth(
             head_item = {
                 "salary_head": head_name,
                 "head_key": col_key,
-                "current_value": curr_val,
-                "samarth_value": sam_val,
-                "difference": diff,
+                "current_value": to_clean_num(curr_val),
+                "samarth_value": to_clean_num(sam_val),
+                "difference": to_clean_num(diff),
                 "status": status,
                 "is_total": is_total,
                 "is_employer_contribution": is_emp_contrib
@@ -386,9 +543,9 @@ def compare_current_vs_samarth(
                 "category": cat_name,
                 "salary_head": head_name,
                 "head_key": col_key,
-                "current_value": curr_val,
-                "samarth_value": sam_val,
-                "difference": diff,
+                "current_value": to_clean_num(curr_val),
+                "samarth_value": to_clean_num(sam_val),
+                "difference": to_clean_num(diff),
                 "status": status,
                 "is_total": is_total,
                 "is_employer_contribution": is_emp_contrib
@@ -400,15 +557,17 @@ def compare_current_vs_samarth(
             "employee_id": emp_id,
             "category": cat_name,
             "match_status": emp_match_status,
-            "current_total": round(emp_current_total, 2),
-            "samarth_total": round(emp_samarth_total, 2),
-            "difference": emp_diff,
+            "current_total": to_clean_num(emp_current_total),
+            "samarth_total": to_clean_num(emp_samarth_total),
+            "difference": to_clean_num(emp_diff),
             "mismatch_count": emp_mismatch_count,
             "heads": emp_heads_list
         })
 
     # Sort head mismatch summary by number of discrepancies descending
     head_mismatch_list = list(head_mismatch_stats.values())
+    for hm in head_mismatch_list:
+        hm["total_difference"] = to_clean_num(hm["total_difference"])
     head_mismatch_list.sort(key=lambda h: (-h["employees_changed"], h["salary_head"]))
 
     # Summary KPIs
@@ -423,9 +582,9 @@ def compare_current_vs_samarth(
         "total_mismatches": total_mismatches,
         "total_one_time_entries": len(one_time_entries),
         "total_missing_values": total_missing_values,
-        "total_current_amount": round(total_current_amount, 2),
-        "total_samarth_amount": round(total_samarth_amount, 2),
-        "total_difference": total_diff_overall,
+        "total_current_amount": to_clean_num(total_current_amount),
+        "total_samarth_amount": to_clean_num(total_samarth_amount),
+        "total_difference": to_clean_num(total_diff_overall),
         "current_filename": current_filename,
         "samarth_filename": samarth_filename
     }

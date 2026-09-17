@@ -592,6 +592,10 @@ def save_payroll_entries(db: Session, month: Any, year: Any, entries: list):
         except Exception:
             amt = Decimal("0")
 
+        # Ignore entries if amount is 0
+        if amt <= Decimal("0"):
+            continue
+
         key = (int(emp_id), int(head_id))
         if key in entry_map:
             existing = entry_map[key]
@@ -633,17 +637,27 @@ def sync_payroll_from_comparison(db: Session, month: Any, year: Any, entries: li
     )
     
     # 2. Cache existing employees and heads
-    import re
-    def norm_key(name: str) -> str:
-        if not name:
-            return ""
-        n = re.sub(r"^(dr\.|prof\.|mr\.|mrs\.|ms\.|shri|smt\.)\s+", "", name.strip(), flags=re.IGNORECASE)
-        return re.sub(r"[\s\._-]+", " ", n).strip().upper()
-
+    from app.comparison.current_vs_samarth import get_name_variations
+    
     all_db_emps = db.query(Employee).all()
-    emp_cache = {e.employee_name.strip().upper(): e for e in all_db_emps}
-    emp_code_cache = {e.employee_code.strip().upper(): e for e in all_db_emps}
-    emp_norm_cache = {norm_key(e.employee_name): e for e in all_db_emps}
+    emp_cache = {e.employee_name.strip().upper(): e for e in all_db_emps if e.employee_name}
+    emp_code_cache = {e.employee_code.strip().upper(): e for e in all_db_emps if e.employee_code}
+    emp_variations_cache = {}
+    collisions = set()
+    for e in all_db_emps:
+        if not e.employee_name:
+            continue
+        code = (e.employee_code or "").strip().upper()
+        for var in get_name_variations(e.employee_name):
+            if var:
+                if var in emp_variations_cache and emp_variations_cache[var].employee_code != code:
+                    collisions.add(var)
+                else:
+                    emp_variations_cache[var] = e
+
+    for c in collisions:
+        emp_variations_cache.pop(c, None)
+
     head_cache = {h.salary_head.strip().upper(): h for h in db.query(SalaryHead).all()}
     
     entry_map = {}
@@ -670,12 +684,23 @@ def sync_payroll_from_comparison(db: Session, month: Any, year: Any, entries: li
         except Exception:
             amount = Decimal("0")
         
+        # Ignore entries if amount is 0 (zero)
+        if amount <= Decimal("0"):
+            continue
+        
         # Match with official Employee Master
-        emp_match = (
-            emp_cache.get(emp_name.upper()) or
-            emp_norm_cache.get(norm_key(emp_name)) or
-            emp_code_cache.get(emp_code.upper())
-        )
+        emp_match = emp_code_cache.get(emp_code.upper()) or emp_cache.get(emp_name.upper())
+        if not emp_match:
+            for var in get_name_variations(emp_name):
+                if var in emp_variations_cache:
+                    emp_match = emp_variations_cache[var]
+                    break
+        if not emp_match and emp_code:
+            for var in get_name_variations(emp_code):
+                if var in emp_variations_cache:
+                    emp_match = emp_variations_cache[var]
+                    break
+
         if not emp_match:
             emp_match = Employee(
                 employee_code=emp_code,
@@ -684,8 +709,9 @@ def sync_payroll_from_comparison(db: Session, month: Any, year: Any, entries: li
             db.add(emp_match)
             db.flush()
             emp_cache[emp_name.upper()] = emp_match
-            emp_norm_cache[norm_key(emp_name)] = emp_match
             emp_code_cache[emp_code.upper()] = emp_match
+            for var in get_name_variations(emp_name):
+                emp_variations_cache[var] = emp_match
             
         # Find or create SalaryHead in DB master
         head_match = head_cache.get(head_name.upper())

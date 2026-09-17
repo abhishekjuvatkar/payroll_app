@@ -26,8 +26,8 @@ THIN_BORDER = Border(
     bottom=Side(style='thin', color='CBD5E1')
 )
 
-CURRENCY_FORMAT = '"₹"#,##0.00;[Red]("-₹"#,##0.00);"-"'
-INTEGER_FORMAT = '#,##0'
+CURRENCY_FORMAT = '0;[Red](-0);"-"'
+INTEGER_FORMAT = '0'
 
 def auto_fit_columns(ws, min_width=12, max_width=45):
     """Auto-fit column widths with safety boundaries."""

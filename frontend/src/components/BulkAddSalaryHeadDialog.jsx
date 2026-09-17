@@ -564,7 +564,7 @@ export default function BulkAddSalaryHeadDialog({
                           </TableCell>
                           <TableCell align="right">
                             <Typography fontSize="0.85rem" fontWeight={700}>
-                              ₹{Number(r.amount || 0).toLocaleString("en-IN")}
+                              {(Number(r.amount || 0) % 1 === 0) ? Math.round(Number(r.amount || 0)) : (Math.round(Number(r.amount || 0) * 100) / 100)}
                             </Typography>
                           </TableCell>
                           <TableCell>
